@@ -47,7 +47,11 @@ def choose_cover_file():
         print("Ungültige Eingabe. Bitte eine Zahl aus der Liste wählen.")
 
     # Dateien dieses Typs im aktuellen Verzeichnis suchen
-    available_files = [f for f in os.listdir() if f.endswith(cover_ext)]
+    available_files = [
+        f
+        for f in os.listdir()
+        if f.endswith(cover_ext) and os.path.isfile(f)
+    ]
 
     if not available_files:
         print(f"Keine {cover_ext}-Dateien gefunden. Bitte manuell eingeben.")
@@ -58,11 +62,13 @@ def choose_cover_file():
             print(f"{i}: {filename}")
 
         while True:
-            file_choice = input("Datei wählen oder eigenen Pfad eingeben: ").strip()
+            file_choice = input(
+                "Datei wählen oder eigenen Pfad eingeben: "
+            ).strip()
             if file_choice.isdigit() and 1 <= int(file_choice) <= len(available_files):
                 file_path = available_files[int(file_choice) - 1]
                 break
-            elif os.path.exists(file_choice):
+            elif os.path.isfile(file_choice):
                 file_path = file_choice
                 break
             print("Ungültige Eingabe. Wähle eine Zahl oder gib einen gültigen Pfad an.")
@@ -84,7 +90,11 @@ def choose_hidden_file():
         print("Ungültige Eingabe. Bitte eine Zahl aus der Liste wählen.")
 
     # Dateien dieses Typs im aktuellen Verzeichnis suchen
-    available_files = [f for f in os.listdir() if f.endswith(hidden_ext)]
+    available_files = [
+        f
+        for f in os.listdir()
+        if f.endswith(hidden_ext) and os.path.isfile(f)
+    ]
 
     if not available_files:
         print(f"Keine {hidden_ext}-Dateien gefunden. Bitte manuell eingeben.")
@@ -95,11 +105,13 @@ def choose_hidden_file():
             print(f"{i}: {filename}")
 
         while True:
-            file_choice = input("Datei wählen oder eigenen Pfad eingeben: ").strip()
+            file_choice = input(
+                "Datei wählen oder eigenen Pfad eingeben: "
+            ).strip()
             if file_choice.isdigit() and 1 <= int(file_choice) <= len(available_files):
                 file_path = available_files[int(file_choice) - 1]
                 break
-            elif os.path.exists(file_choice):
+            elif os.path.isfile(file_choice):
                 file_path = file_choice
                 break
             print("Ungültige Eingabe. Wähle eine Zahl oder gib einen gültigen Pfad an.")
@@ -112,30 +124,40 @@ def embed_data(cover_file, hidden_file):
     with open(hidden_file, "rb") as f:
         hidden_data = f.read()
 
-    compressed_data = zlib.compress(hidden_data)  # Komprimieren
-    encoded_data = base64.b64encode(compressed_data).decode()  # Base64-Codieren
+    compressed_data = zlib.compress(hidden_data)
+    encoded_data = base64.b64encode(compressed_data)
     marker = "###HIDDEN_DATA###"  # Erkennungsmarkierung
 
     with open(cover_file, "rb") as f:
         cover_data = f.read()
 
-    new_file = f"hidden_{cover_file}"
+    if marker.encode() in cover_data:
+        print("Warnung: In der Zieldatei befinden sich bereits versteckte Daten.")
+        return
+
+    base_name = os.path.basename(cover_file)
+    new_file = f"hidden_{base_name}"
     with open(new_file, "wb") as f:
-        f.write(cover_data + marker.encode() + encoded_data.encode())
+        f.write(cover_data + marker.encode() + encoded_data)
 
     print(f"Daten erfolgreich in {new_file} versteckt!")
 
 # Funktion zum Extrahieren der Daten
 def extract_data(cover_file):
-    marker = "###HIDDEN_DATA###"
+    marker = "###HIDDEN_DATA###".encode()
 
     with open(cover_file, "rb") as f:
-        content = f.read().decode(errors="ignore")
+        content = f.read()
 
-    if marker in content:
-        encoded_data = content.split(marker)[-1]
-        compressed_data = base64.b64decode(encoded_data)
-        hidden_data = zlib.decompress(compressed_data)
+    index = content.find(marker)
+    if index != -1:
+        encoded_data = content[index + len(marker) :]
+        try:
+            compressed_data = base64.b64decode(encoded_data)
+            hidden_data = zlib.decompress(compressed_data)
+        except (base64.binascii.Error, zlib.error) as e:
+            print("Fehler beim Dekodieren der versteckten Daten:", e)
+            return
 
         output_file = "extracted_data"
         with open(output_file, "wb") as f:
